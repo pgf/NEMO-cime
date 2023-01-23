@@ -1,0 +1,7 @@
+<components version="2.0">
+
+  <comp_archive_spec compname="nemo" compclass="ocn">
+    <rest_file_extension>restart</rest_file_extension>  
+    <rest_history_varname>unset</rest_history_varname>    
+  </comp_archive_spec>
+</components>

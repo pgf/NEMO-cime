@@ -1,0 +1,41 @@
+<?xml version="1.0"?>
+
+<entry_id version="3.0">
+  <description modifier_mode="*">
+    <desc ocn="NEMO">NEMO version 4.2.0</desc>
+  </description>
+
+  <entry id="COMP_OCN">
+    <type>char</type>
+    <valid_values>nemo</valid_values>
+    <default_value>nemo</default_value>
+    <group>case_comp</group>
+    <file>env_case.xml</file>
+    <desc>Name of ocean component</desc>
+  </entry>
+
+  <entry id="NEMO_REBUILD">
+    <type>logical</type>
+    <valid_values>TRUE,FALSE</valid_values>
+    <default_value>FALSE</default_value>
+    <group>run_dout</group>
+    <file>env_run.xml</file>
+    <desc>if true, NEMO output files rebuild is performed at the end of run</desc>
+  </entry>
+
+  <entry id="NEMO_TOP_MODULES">
+    <type>char</type>
+    <valid_values> ,age,cfc,c14</valid_values> 
+    <default_value></default_value> 
+    <group>build_component_nemo</group>
+    <file>env_build.xml</file>
+    <desc>Optional NEMO ocean tracers. Valid values are Any combination of: age cfc</desc>
+  </entry>
+
+  <help>
+    =========================================
+    NEMO naming conventions
+    =========================================
+  </help>
+
+</entry_id>
