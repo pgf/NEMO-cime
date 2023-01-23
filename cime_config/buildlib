@@ -79,7 +79,7 @@ def _build_nemo():
         filepath_file = os.path.join(objroot, "ocn", "obj", "Filepath")
         if not os.path.isfile(filepath_file):
             paths_nemo = [os.path.join(caseroot, "SourceMods", "src.nemo"), 
-                          os.path.join(srcroot, "components", "nemo", fld_nmv, "interface"),
+                          os.path.join(srcroot, "components", "nemo", fld_nmv, "interface", "src"),
                           os.path.join(srcroot, "components", "nemo", fld_nmv, "nemocore", "src", "OCE"),
                           os.path.join(srcroot, "components", "nemo", fld_nmv, "nemocore", "src", "OCE", "ASM"),
                           os.path.join(srcroot, "components", "nemo", fld_nmv, "nemocore", "src", "OCE", "BDY"),
@@ -122,6 +122,7 @@ def _build_nemo():
                 paths_nemo.append(os.path.join(srcroot, "components", "nemo", fld_nmv, "drivers", "cpl_share"))
                 paths_nemo.append(os.path.join(srcroot, "components", "nemo", fld_nmv, "drivers", "cpl_mct"))
 #            paths_nemo.append(os.path.join(caseroot, "SourceMods", "src.nemo"))
+            paths_nemo.append(os.path.join(srcroot, "components", "nemo", fld_nmv, "interface", "ext"))
             paths_nemo.append(os.path.join(srcroot, "components", "nemo", fld_nmv, "nemocore", "ext", "IOIPSL", "src"))
 
             with open(filepath_file, "w") as filepath:
