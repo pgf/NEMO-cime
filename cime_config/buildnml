@@ -336,8 +336,8 @@ def buildnml(case, caseroot, compname):
 
     # get last day of previous run
     pday = ndastp % 100
-    pmonth = ndastp/100 % 100
-    pyear = ndastp / 100 / 100
+    pmonth = ndastp//100 % 100
+    pyear = ndastp // 100 // 100
     
     # Compute last day of the previous & current months
     lastday = 31
