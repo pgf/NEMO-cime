@@ -1,0 +1,11 @@
+<?xml version="1.0"?>
+<testlist version="2.0">
+	<test name="ERR_Ld5" grid="T62_n0253" compset="GIAF_NEMO" testmods="nemo/def_cmcc">
+    <machines>
+      <machine name="juno" compiler="intel" category="comp_cmcc"/>
+    </machines>
+    <options>
+      <option name="wallclock">00:40:00</option>
+    </options>
+  </test>
+</testlist>
