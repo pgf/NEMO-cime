@@ -14,15 +14,6 @@
     <desc>Name of ocean component</desc>
   </entry>
 
-  <entry id="NEMO_REBUILD">
-    <type>logical</type>
-    <valid_values>TRUE,FALSE</valid_values>
-    <default_value>FALSE</default_value>
-    <group>run_dout</group>
-    <file>env_run.xml</file>
-    <desc>if true, NEMO output files rebuild is performed at the end of run</desc>
-  </entry>
-
   <entry id="NEMO_TOP_MODULES">
     <type>char</type>
     <valid_values> ,age,cfc,c14</valid_values> 
