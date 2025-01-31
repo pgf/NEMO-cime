@@ -3,20 +3,20 @@
 """NEMO namelist creator
 """
 
-import os, shutil, sys, glob, stat, filecmp, imp
+import os, shutil, sys, glob
 import subprocess
-from netCDF4 import Dataset
+from   netCDF4                   import Dataset
 
 CIMEROOT = os.environ.get("CIMEROOT")
 if CIMEROOT is None:
     raise SystemExit("ERROR: must set CIMEROOT environment variable")
 sys.path.append(os.path.join(CIMEROOT, "scripts", "Tools"))
 
-from standard_script_setup import *
-from CIME.case import Case
-from CIME.utils import expect
-from CIME.buildnml import create_namelist_infile, parse_input
-from CIME.utils import run_cmd
+from standard_script_setup       import *
+from CIME.case                   import Case
+from CIME.utils                  import expect
+from CIME.buildnml               import create_namelist_infile, parse_input
+from CIME.utils                  import run_cmd
 
 logger = logging.getLogger(__name__)
 
@@ -28,32 +28,37 @@ def buildnml(case, caseroot, compname):
 
     # Build the component namelist
     if compname != "nemo":
-        raise AttributeError
+        raise ValueError("compname != 'nemo' !")
 
-    cimeroot = case.get_value("CIMEROOT")
-    srcroot = case.get_value("SRCROOT")
+    cimeroot     = case.get_value("CIMEROOT")
+    srcroot      = case.get_value("SRCROOT")
     din_loc_root = case.get_value("DIN_LOC_ROOT")
     continue_run = case.get_value("CONTINUE_RUN")
-    ocn_grid = case.get_value("OCN_GRID")
-    run_type = case.get_value("RUN_TYPE")
-    run_refdate = case.get_value("RUN_REFDATE")
-    run_refcase = case.get_value("RUN_REFCASE")
-    run_strdate = case.get_value("RUN_STARTDATE")
-    rundir = case.get_value("RUNDIR")
+    ocn_grid     = case.get_value("OCN_GRID")
+    run_type     = case.get_value("RUN_TYPE")
+    run_refdate  = case.get_value("RUN_REFDATE")
+    run_refcase  = case.get_value("RUN_REFCASE")
+    run_strdate  = case.get_value("RUN_STARTDATE")
+    rundir       = case.get_value("RUNDIR")
     nemo_top_mod = case.get_value("NEMO_TOP_MODULES")
-    calendar = case.get_value("CALENDAR")
-    ocn_ncpl = case.get_value("OCN_NCPL")
+    calend       = case.get_value("CALENDAR")  # Beware, calendar it's the name of a standard Python module!!!
+    ocn_ncpl     = case.get_value("OCN_NCPL")
     ncpl_base_period = case.get_value("NCPL_BASE_PERIOD")
-    stop_option = case.get_value("STOP_OPTION")
-    stop_n = case.get_value("STOP_N")
-    casenm = case.get_value("CASE")
-    comp_atm = case.get_value("COMP_ATM")
+    stop_option  = case.get_value("STOP_OPTION")
+    stop_n       = case.get_value("STOP_N")
+    casenm       = case.get_value("CASE")
+    comp_atm     = case.get_value("COMP_ATM")
 
-    # Set correct SHARED folder and link based on NEMO version
-    #nml_nmv = "nml"
+    # Set source NEMO configuration, tools & data directories
+    source_dir = os.path.join(srcroot, "components", compname, "source")
+    cfg_shared = os.path.join(source_dir, "nemocore", "cfgs", "SHARED") 
+    cfg_grid   = os.path.join(source_dir, "cfgs", ocn_grid) 
+    src_utils  = os.path.join(source_dir, "utils")
+    nemo_in    = os.path.realpath(os.path.join(din_loc_root, "ocn", compname, ocn_grid))
 
-    # Set nemo configuration directory
-    confdir = os.path.join(caseroot, "Buildconf", "nemoconf")
+    # Create NEMO build configuration & Tools directories
+    toolsdir = os.path.join(caseroot, "Tools")
+    confdir  = os.path.join(caseroot, "Buildconf", "nemoconf")
     if not os.path.isdir(confdir):
         os.makedirs(confdir)
 
@@ -61,18 +66,16 @@ def buildnml(case, caseroot, compname):
     if not os.path.exists(rundir):
         os.makedirs(rundir)
 
-    #copy of the basic reference nemo namelist
+    # Copy the basic reference & configuration nemo namelists
     nml_cfg = os.path.join(confdir, "namelist_cfg")
     nml_ref = os.path.join(confdir, "namelist_ref")
     if not os.path.exists(nml_cfg):
-        grid_cfg = "namelist_cfg." + ocn_grid
-        orig_cfg = os.path.join(srcroot, "components", "nemo", "source", "cfgs", ocn_grid, grid_cfg) 
+        orig_cfg = os.path.join(cfg_grid, "namelist_cfg." + ocn_grid) 
         shutil.copy(orig_cfg, nml_cfg)
     if not os.path.exists(nml_ref):
-        orig_ref = os.path.join(srcroot, "components", "nemo", "source", "nemocore", "cfgs", "SHARED") 
-        _copy_file('namelist_ref', orig_ref, confdir)
+        _copy_file('namelist_ref', cfg_shared, confdir)
 
-    # copy of nemo namelist if tracer are activated
+    # Copy of NEMO tracer namelists if active TOP modules
     NEMO_TOP_AGE = 0 
     NEMO_TOP_CFC = 0
     ocn_pstr_modules = " ".join(nemo_top_mod.split())
@@ -80,49 +83,48 @@ def buildnml(case, caseroot, compname):
         top_cfg = os.path.join(confdir, "namelist_top_cfg")
         top_ref = os.path.join(confdir, "namelist_top_ref") 
         if not os.path.exists(top_cfg):
-            gridT_cfg = "namelist_top_cfg." + ocn_grid
-            orig_cfg = os.path.join(srcroot, "components", "nemo", "source", "cfgs", ocn_grid, gridT_cfg)
+            grid_cfg = "namelist_top_cfg." + ocn_grid
+            orig_cfg = os.path.join(cfg_grid, grid_cfg)
             shutil.copy(orig_cfg, top_cfg)
         if not os.path.exists(top_ref):
-            orig_ref = os.path.join(srcroot, "components", "nemo", "source", "nemocore", "cfgs", "SHARED")
-            _copy_file('namelist_top_ref', orig_ref, confdir)
+            _copy_file('namelist_top_ref', cfg_shared, confdir)
         for module in ocn_pstr_modules.split(" "):
             if module == "age":
                 NEMO_TOP_AGE = 1
                 age_cfg = os.path.join(confdir, "namelist_age_cfg")
                 age_ref = os.path.join(confdir, "namelist_age_ref")
                 if not os.path.exists(age_cfg):
-                    orig_ref = os.path.join(srcroot, "components", "nemo", "source", "nemocore", "cfgs", "SHARED")
-                    _copy_file('namelist_age_cfg', orig_ref, confdir)
+                    _copy_file('namelist_age_cfg', cfg_shared, confdir)
                 if not os.path.exists(age_ref):
-                    orig_ref = os.path.join(srcroot, "components", "nemo", "source", "nemocore", "cfgs", "SHARED")
-                    _copy_file('namelist_age_ref', orig_ref, confdir)
+                    _copy_file('namelist_age_ref', cfg_shared, confdir)
             if module == "cfc":
                 NEMO_TOP_CFC = 1
                 cfc_cfg = os.path.join(confdir, "namelist_cfc_cfg")
                 cfc_ref = os.path.join(confdir, "namelist_cfc_ref")
                 if not os.path.exists(cfc_cfg):
-                    orig_ref = os.path.join(srcroot, "components", "nemo", "source", "nemocore", "cfgs", "SHARED")
-                    _copy_file('namelist_cfc_cfg', orig_ref, confdir)
+                    _copy_file('namelist_cfc_cfg', cfg_shared, confdir)
                 if not os.path.exists(cfc_ref):
-                    orig_ref = os.path.join(srcroot, "components", "nemo", "source", "nemocore", "cfgs", "SHARED")
-                    _copy_file('namelist_cfc_ref', orig_ref, confdir)
+                    _copy_file('namelist_cfc_ref', cfg_shared, confdir)
             else:
                 expect(False, "module %s is not a valid value in NEMO_TOP_MODULES!" %module)
 
-    # copy of nemo namelist required by xios       
+    # Copy of configuration files required for the I/O through IOM/XIOS
     iodef_nml = os.path.join(confdir, "iodef.xml")
     if not os.path.exists(iodef_nml):
-        orig_ref = os.path.join(srcroot, "components", "nemo", "source", "cfgs", ocn_grid)
-        filenames = glob.glob(orig_ref + '/*.xml')
+        # First copy file from the SHARED folder
+        filenames = glob.glob(os.path.join(cfg_shared, '*.xml'))
+        for filename in filenames:
+            shutil.copy(filename, confdir)  
+        # Then overwrite with configuration specific versions
+        filenames = glob.glob(os.path.join(cfg_grid, '*.xml'))
         for filename in filenames:
             shutil.copy(filename, confdir)  
  
-    # copy of nemo namelist into rundir directory
-    filenames = glob.glob(confdir + '/namelist*')
+    # Copy of NEMO namelists into rundir directory
+    filenames = glob.glob(os.path.join(confdir, 'namelist*'))
     for filename in filenames:
             shutil.copy(filename, rundir)
-    filenames = glob.glob(confdir + '/*xml')
+    filenames = glob.glob(os.path.join(confdir, '*.xml'))
     for filename in filenames:
             shutil.copy(filename, rundir)
     
@@ -130,98 +132,105 @@ def buildnml(case, caseroot, compname):
         iodef_run = os.path.join(rundir, "iodef.xml")
         subprocess.call(['sed','-i','/def_top.xml/d',iodef_run]) 
 
-    # copy of nemo postrun script
-    pstrun = os.path.join(confdir, "postrun_tpl")
-    if not os.path.exists(pstrun):
-        pstr_ref = os.path.join(srcroot, "components", "nemo", "source", "utils", "postrun_tpl")
-        shutil.copy(pstr_ref,confdir) 
+    # Copy of NEMO postrun script
+    if not os.path.exists(os.path.join(confdir, "postrun_tpl")):
+        _copy_file('postrun_tpl', src_utils, confdir)
 
-    # define initial and boundary conditions files
-    nemo_in = os.path.join(din_loc_root, "ocn", "nemo", ocn_grid)
-    if ocn_grid == "tn1v3":
-        COORDINATES   = "grid/ORCA1_coordinates_v1.0.nc"
-        BATHYMETRY    = "grid/ORCA1_bathy_meter_tn1v3.nc"
-        MASK_ITF      = "grid/ORCA1_maskITF_v1.0.nc"
-        SUBBASINS     = "grid/ORCA1_subbasins.nc"
-        GEOTHERMAL    = "forcing/ORCA1_Goutorbe_gh_flux_bicubic.nc"
-        K1ROWDRG      = "forcing/ORCA1_K1_v1.0.nc"
-        M2ROWDRG      = "forcing/ORCA1_M2_v1.0.nc"
-        CHLOROPHYLL   = "forcing/ORCA1_ESACCI_CHLA_bicubic.nc"
-        AHMCOEF       = "forcing/ORCA1_ahmcoef_v1.0.nc"
-        COORDINATES_XIOS = "grid/ORCA1_coordinates_xios.nc"
-        DISTCOAST = "no_distcoast_file.nc"
-        SSSR = "no_sssr_file.nc"
-        CFC = "no_cfc_file.dat"
-      # WOA 2013
-        TEMPERATURE   = "ic/WOA13-95A4_ORCA1_L50_1m_potential_temperature_nomask.nc"
-        SALINITY      = "ic/WOA13-95A4_ORCA1_L50_1m_practical_salinity_nomask.nc"
-    elif ocn_grid == "tn0.25v3":
+    # Define initial and boundary conditions files
+    if ocn_grid == "tn1v3": # ORCA1
+        DOMAIN        = "grid/ORCA1L50_domain_cfg.nc"
+        SUBBASINS     = "grid/ORCA1_subbasins_nohalo.nc"
+        #MASK_ITF      = "grid/ORCA1_maskITF_v1.0.nc"     # Indonesian Through Flow (???)
+        #
+        GEOTHERMAL    = "forcing/ORCA1_Goutorbe2011_heatflow_nomask.nc"
+        #K1ROWDRG      = "forcing/ORCA1_K1_v1.0_nohalo.nc"    # Needed by NEMO 4.2+ ?
+        #M2ROWDRG      = "forcing/ORCA1_M2_v1.0_nohalo.nc"    # Needed by NEMO 4.2+ ?
+        CHLOROPHYLL   = "forcing/ORCA1_ESACCIv4_chl_nomask.nc"
+        #AHMCOEF       = "forcing/ORCA1_ahmcoef_v1.0.nc"
+        #COORDINATES_XIOS = "grid/ORCA1_coordinates_xios.nc"
+        #DISTCOAST     = "no_distcoast_file.nc"
+        #SSSR          = "no_sssr_file.nc"
+      # WOA IC
+        TEMPERATURE   = "ic/ORCA1L50_woa18_thetao_nomask.nc"
+        SALINITY      = "ic/ORCA1L50_woa18_so_nomask.nc"
+    elif ocn_grid == "tn0.25v3":  # ORCA025
+        DOMAIN        = "grid/ORCA025L75_domain_cfg.nc"
+        SUBBASINS     = "grid/ORCA025L75_subbasins.nc"
+        #
         CHLOROPHYLL   = "forcing/ORCA025L75_ESACCIv4_chl_nomask.nc"
         GEOTHERMAL    = "forcing/ORCA025L75_Goutorbe2011_heatflow_nomask.nc"
-        BATHYMETRY    = "grid/ORCA025_bathy_meter_tn0.25v3.nc"
-        SUBBASINS     = "grid/ORCA025L75_subbasins.nc"
-        DOMAIN        = "grid/ORCA025L75_domain_cfg.nc"
-      # WOA 2018
+        #BATHYMETRY    = "grid/ORCA025_bathy_meter_tn0.25v3.nc"
+      # WOA IC
         TEMPERATURE   = "ic/ORCA025L75_woa18_thetao_nomask.nc"
         SALINITY      = "ic/ORCA025L75_woa18_so_nomask.nc"
+    #elif ocn_grid == "Med-CORDEX.RP004":  # Med-CORDEX Rotated Pole grid at 1/24 of degree
     else:
         expect(False, "grid %s is not a valid value in OCN_GRID!" %ocn_grid)
 
+    CFC = ""
     if NEMO_TOP_CFC == 1:
         CFC = "../resolution_independent/forcing/CFCs_CDIAC.nc"
 
-# DEBUG DP
-  #  logger.info("Value of CONTINUE_RUN read from env_run: %s" ,continue_run)
+    # check for existence of (or create symlinks for) the IC/BC/grid files
 
-    # create link for the initial and boudary conditions in the rundir
-    data_1mt = os.path.join(rundir, "ORCA025L75_woa18_thetao_nomask.nc")
-    data_tmp = os.path.join(nemo_in, TEMPERATURE)
-# DEBUG DP
-  #  logger.info("... data_1mt: %s" ,data_1mt)
-  #  logger.info("... data_tmp: %s" ,data_tmp)
-    if not os.path.exists(data_1mt) and os.path.exists(data_tmp) and continue_run == False:
-        	os.symlink(data_tmp, data_1mt)
+    # domain_cfg
+    data_gr_dmn = os.path.join(rundir, "domain_cfg.nc")
+    data_gr_dms = os.path.realpath(os.path.join(nemo_in, DOMAIN))
+    if not os.path.exists(data_gr_dms):
+        raise RuntimeError("domain_cfg file not found!\n{:s}".format(data_gr_dms))
+    elif not os.path.exists(data_gr_dmn):
+        os.symlink(data_gr_dms, data_gr_dmn)
 
-    data_1ms = os.path.join(rundir, "ORCA025L75_woa18_so_nomask.nc")
-    data_sal = os.path.join(nemo_in, SALINITY)
-    if not os.path.exists(data_1ms) and os.path.exists(data_sal):
-        os.symlink(data_sal, data_1ms)
+    # subbasins.nc (optional)
+    if _isactive(SUBBASINS):
+        data_gr_sbb = os.path.join(rundir, "subbasins.nc")
+        data_gr_sbs = os.path.realpath(os.path.join(nemo_in, SUBBASINS))
+        if not os.path.exists(data_gr_sbs):
+            raise RuntimeError("Subbasins file not found!\n{:s}".format(data_gr_sbs))
+        elif not os.path.exists(data_gr_sbb):
+            os.symlink(data_gr_sbs, data_gr_sbb)
 
-    data_cms = os.path.join(rundir, "sali_ref_clim_monthly.nc")
-    data_scm = os.path.join(nemo_in, SALINITY)
-    if not os.path.exists(data_cms) and os.path.exists(data_scm):
-        os.symlink(data_scm, data_cms)
+    # IC
+    data_ic_tem = os.path.join(rundir, "data_1m_potential_temperature_nomask.nc")
+    data_ic_tes = os.path.realpath(os.path.join(nemo_in, TEMPERATURE))
+    if not os.path.exists(data_ic_tes) and continue_run == False:
+        raise RuntimeError("T IC file not found!\n{:s}".format(data_ic_tes))
+    elif not os.path.exists(data_ic_tem):
+        os.symlink(data_ic_tes, data_ic_tem)
 
-    data_clp = os.path.join(rundir, "ORCA025L75_ESACCIv4_chl_nomask.nc")
-    data_ccp = os.path.join(nemo_in, CHLOROPHYLL)
-    if not os.path.exists(data_clp) and os.path.exists(data_ccp):
-        os.symlink(data_ccp, data_clp)
+    data_ic_sal = os.path.join(rundir, "data_1m_salinity_nomask.nc")
+    data_ic_sas = os.path.realpath(os.path.join(nemo_in, SALINITY))
+    if not os.path.exists(data_ic_sas):
+        raise RuntimeError("S IC file not found!\n{:s}".format(data_ic_sas))
+    elif not os.path.exists(data_ic_sal):
+        os.symlink(data_ic_sas, data_ic_sal)
 
-    if ocn_grid == "tn1v3":
-        data_amc = os.path.join(rundir, "ahmcoef.nc")
-        data_aac = os.path.join(nemo_in, AHMCOEF)
-        if not os.path.exists(data_amc) and os.path.exists(data_aac):
-            os.symlink(data_aac, data_amc)
+    # Reference salinity for diagnostics (needed by diaar5)
+    data_bc_scm = os.path.join(rundir, "sali_ref_clim_monthly.nc")
+    data_bc_cms = os.path.realpath(os.path.join(nemo_in, SALINITY))
+    if not os.path.exists(data_bc_cms):
+        raise RuntimeError("S BC file not found!\n{:s}".format(data_bc_cms))
+    elif not os.path.exists(data_bc_scm):
+        os.symlink(data_bc_cms, data_bc_scm)
 
-    data_btm = os.path.join(rundir, "bathy_meter.nc")
-    data_bbm = os.path.join(nemo_in, BATHYMETRY)
-    if not os.path.exists(data_btm) and os.path.exists(data_bbm):
-        os.symlink(data_bbm, data_btm)
+    # Chlorophyll
+    if _isactive(CHLOROPHYLL):
+        data_bc_chl = os.path.join(rundir, "chlorophyll.nc")
+        data_bc_chs = os.path.realpath(os.path.join(nemo_in, CHLOROPHYLL))
+        if not os.path.exists(data_bc_chs):
+            raise RuntimeError("Chl BC file not found!\n{:s}".format(data_bc_chs))
+        elif not os.path.exists(data_bc_chl):
+            os.symlink(data_bc_chs, data_bc_chl)
 
-    data_sbs = os.path.join(rundir, "subbasins.nc")
-    data_sbb = os.path.join(nemo_in, SUBBASINS)
-    if not os.path.exists(data_sbs) and os.path.exists(data_sbb):
-        os.symlink(data_sbb, data_sbs)
+    # Geothermal heat flux
+    if _isactive(GEOTHERMAL):
+        data_bc_gth = os.path.join(rundir, "geothermal_heating.nc")
+        data_bc_gts = os.path.realpath(os.path.join(nemo_in, GEOTHERMAL))
+        if not os.path.exists(data_bc_gts):
+            raise RuntimeError("Geothermal BC file not found!\n{:s}".format(data_bc_gts))
+        elif not os.path.exists(data_bc_gth):
+            os.symlink(data_bc_gts, data_bc_gth)
 
-    data_crd = os.path.join(rundir, "ORCA025L75_domain_cfg.nc")
-    data_coo = os.path.join(nemo_in, DOMAIN)
-    if not os.path.exists(data_crd) and os.path.exists(data_coo):
-        os.symlink(data_coo, data_crd)
-
-    data_gth = os.path.join(rundir, "ORCA025L75_Goutorbe2011_heatflow_nomask.nc")
-    data_gtm = os.path.join(nemo_in, GEOTHERMAL)
-    if not os.path.exists(data_gth) and os.path.exists(data_gtm):
-        os.symlink(data_gtm, data_gth)
 
     # set value for timestep and last date
     lastkt = 0
@@ -234,11 +243,13 @@ def buildnml(case, caseroot, compname):
     if continue_run == True or run_type != "startup":
         rstart = ".true."
         rstctl = 2
-        msh = 0 
+        msh = ".false." 
+        tsdini = ".false."
     else:
         rstart = ".false."
         rstctl = 0
-        msh = 1
+        msh = ".true."
+        tsdini = ".true."
 
     trcrstart = ".false."
     
@@ -252,7 +263,7 @@ def buildnml(case, caseroot, compname):
             EXPID = casenm
 
         # Looks for restart files and set the variable for the namelist substitution
-        flist = glob.glob(rundir + "/" + EXPID + "_*_" + ocerstinp + "*.nc")
+        flist = glob.glob(os.path.join(rundir, EXPID + "_*_" + ocerstinp + "*.nc"))
         if len(flist) > 1:
             rstflst = flist[0]
             rstfspl = rstflst.split("/")
@@ -280,7 +291,7 @@ def buildnml(case, caseroot, compname):
     
         # Looks for restart files for TOP  and set the variable for the namelist substitution
         if NEMO_TOP_AGE == 1 or NEMO_TOP_CFC == 1:
-            flist = glob.glob(rundir + "/" + EXPID + "_*_" + trcrstinp + "_*.nc")
+            flist = glob.glob(os.path.join(rundir, EXPID + "_*_" + trcrstinp + "_*.nc"))
             if len(flist) > 1:
                 rstflst = flist[0]
                 rstfspl = rstflst.split("/")
@@ -346,7 +357,7 @@ def buildnml(case, caseroot, compname):
     if pmonth == 2:
         lastday = 28
         nlastday = 31
-        if calendar == "GREGORIAN":
+        if calend == "GREGORIAN":
             leapyear = 0
     elif pmonth == 4 or pmonth == 6 or pmonth == 9 or pmonth == 11:
         lastday = 30
@@ -481,108 +492,86 @@ def buildnml(case, caseroot, compname):
             nstock = nstock - int(nnfsbc)
             date0 = date1
 
-
-    # 6. NEMO run-time namelist settings
-
-    Omerge_nml = os.path.join(srcroot, "components", "nemo", "source", "utils", "merge_namelist.pl")
-    Dmerge_nml = os.path.join(caseroot, "Tools", "merge_namelist.pl")
-    if not os.path.exists(Dmerge_nml):
-        shutil.copy(Omerge_nml, Dmerge_nml)
     if comp_atm == "datm":
         nnfwb = 1
     elif comp_atm == "cam":
         nnfwb = 0
 
-    # 6.1 OPA run-time namelist settings
+    # 6. NEMO run-time namelist settings
 
-    filenmlnew_name = os.path.join(rundir, "namelist_cfg.new")
+    merge_nml = os.path.join(toolsdir, "merge_namelist.pl")
+    if not os.path.exists(merge_nml):
+        _copy_file('merge_namelist.pl', src_utils, toolsdir)
 
-    if os.path.exists(filenmlnew_name):
-        os.remove(filenmlnew_name)
+    # 6.1 OCE run-time namelist settings
 
-    with open(filenmlnew_name, "w") as newnml:
+    nml_cfg_new = os.path.join(rundir, "namelist_cfg.new")
+
+    with open(nml_cfg_new, "w") as newnml:
         newnml.write("&namrun \n")
-        newnml.write("    cn_exp    = " + casenm + "    !  experiment name \n")
+        newnml.write("    cn_exp    = \"" + casenm + "\"    !  experiment name \n")
         newnml.write("    nn_it000  = " + str(nit000) + "    !  first time step \n")
         newnml.write("    nn_itend  = " + str(nitend) + "    !  last  time step \n")
         newnml.write("    nn_date0  = " + date0 + "     !  date at nit_0000 (format yyyymmdd) \n")    
         newnml.write("    nn_stock  = " + str(nstock) + "    !  frequency of creation of a restart file \n")
-        newnml.write("    nn_write  = " + str(nstock) + "   !  frequency of write in the output file (no iomput) \n")
+        #newnml.write("    nn_write  = " + str(nstock) + "   !  frequency of write in the output file (no iomput) \n")
         newnml.write("    nn_rstctl = " + str(rstctl) + "    !  restart control ==> activated only if ln_rstart=T \n")
         newnml.write("    ln_rstart = " + rstart + "    !  start from rest (F) or from a restart file (T) \n")
         newnml.write("    cn_ocerst_in = \"" + ocerstinp + "\" !  suffix of ocean restart name (input) \n")
         newnml.write("/ \n")
-        newnml.write("&namzgr \n")
-        newnml.write("    ln_zco     = .false.     !  z-coordinate - full    steps \n")
-        newnml.write("    ln_zps     = .true.      !  z-coordinate - partial steps \n")
-        newnml.write("    ln_sco     = .false.     !  s- or hybrid z-s-coordinate \n")
-        newnml.write("    ln_isfcav  = .false.     !  ice shelf cavity \n")
-        newnml.write("/ \n")
         newnml.write("&namdom \n")
-        newnml.write("    rn_rdt    = " + str(DTSEC) + "     !  time step for the dynamics \n")
-        newnml.write("    nn_closea = 1            !  remove (=0) or keep (=1) closed seas and lakes \n")
-        newnml.write("    nn_msh    = " + str(msh) + "      !  create (=1) a mesh file or not (=0) \n")
+        newnml.write("    rn_Dt     = " + str(DTSEC) + "     !  time step for the dynamics \n")
+        newnml.write("    ln_meshmask = " + msh + "          !  create (T) a mesh file or not (F) \n")
+        newnml.write("/ \n")
+        newnml.write("&namcfg \n")
+        newnml.write("    ln_closea =   .true.               ! control (T) of surface freshwater budget over closed seas or not (F) \n")
+        newnml.write("/ \n")
+        newnml.write("&namtsd \n")
+        newnml.write("    ln_tsd_init = " + tsdini + "       ! ocean initialisation \n")
         newnml.write("/ \n")
         newnml.write("&namsbc \n")
         newnml.write("    nn_fsbc     = " + str(nnfsbc) + "  !  frequency of surface boundary condition computation \n")
         newnml.write("    nn_fwb      = " + str(nnfwb) + "   !  FreshWater Budget: =0 unchecked, =1 global mean of e-p-r set to zero at each time step \n")
         newnml.write("    ln_cpl      = .true.     !  atmosphere coupled   formulation \n")
-        newnml.write("    ln_blk_core = .false.    !  CORE bulk formulation \n")
+        newnml.write("    ln_blk      = .false.    !  CORE bulk formulation \n")
         newnml.write("    nn_ice      = 0          !  =0 no ice boundary condition from LIM model \n")
-        newnml.write("    nn_ice_embd = 0          !  ice shelf melting/freezing, 0 =no isf \n")
+        newnml.write("    ln_ice_embd = .false.    !  ice shelf melting/freezing, 0 =no isf \n")
         newnml.write("    ln_rnf      = .true.     !  runoffs \n")
         newnml.write("    ln_ssr      = .false.    !  Sea Surface Restoring on T and/or S \n")
         newnml.write("/ \n")
         newnml.write("&namsbc_rnf \n")
         newnml.write("   ln_rnf_mouth = .false.    !  specific treatment at rivers mouths \n")
         newnml.write("   ln_rnf_depth = .true.     !  compute depth propagation of runoff (uses rn_hrnf) \n")
-        newnml.write("   rn_rnf_bnd   =  0.0       !  max allowed runoff (redistribute otherwise) [kg/m2/s] \n")
+        newnml.write("   rn_rnf_bnd   =  0.0       !  max allowed runoff (redistribute the excess, CESM coupled formulation) [kg/m2/s] \n")
         newnml.write("/ \n")
         newnml.write("&namzdf \n")
         newnml.write("    nn_evdm  = 1             !  evd apply on tracer (=0) or on tracer and momentum (=1) \n")
-        newnml.write("    rn_avevd = 10.0          !  evd mixing coefficient [m2/s] \n")
-        newnml.write("/ \n")
-        newnml.write("&namctl \n")
-        newnml.write("   ln_ctl      = .false.     !  trends control print (expensive!) \n")
+        newnml.write("    rn_evd   = 10.0          !  evd mixing coefficient [m2/s] \n")
         newnml.write("/ \n")
 
 
+    nml_cfg_run = os.path.join(rundir, "namelist_cfg")
     nml_cfg_tmp = os.path.join(rundir, "namelist_cfg.tmp")
 
-    if os.path.exists(nml_cfg_tmp):
-        os.remove(nml_cfg_tmp)
-
-    cmd = "%s %s %s %s" %(Dmerge_nml, nml_cfg, filenmlnew_name, nml_cfg_tmp)
+    # Merge nml_cfg_new with nml_cfg
+    cmd = "%s %s %s %s" %(merge_nml, nml_cfg, nml_cfg_new, nml_cfg_tmp)
     rc, out, err = run_cmd(cmd, verbose=True)
     expect(rc == 0, "Command %s failed rc=%d\nout=%s\nerr=%s" % (cmd, rc, out, err))
-    
-    os.remove(nml_cfg)
-    os.remove(filenmlnew_name)
-    shutil.move(nml_cfg_tmp, nml_cfg)
+    os.remove(nml_cfg_new)
 
-    if os.path.exists(nml_cfg_tmp):
-        os.remove(nml_cfg_tmp)
-
+    # Merge nml_cfg_tmp with nml_cfg_user
     nml_cfg_user = os.path.join(caseroot, "user_nl_nemo")
-    cmd = "%s %s %s %s" %(Dmerge_nml, nml_cfg, nml_cfg_user, nml_cfg_tmp)
+    cmd = "%s %s %s %s" %(merge_nml, nml_cfg_tmp, nml_cfg_user, nml_cfg_run)
     rc, out, err = run_cmd(cmd, verbose=True)
     expect(rc == 0, "Command %s failed rc=%d\nout=%s\nerr=%s" % (cmd, rc, out, err))
-    
-    nml_cfg_run = os.path.join(rundir, "namelist_cfg")
-
-    if os.path.exists(nml_cfg_run):
-        os.remove(nml_cfg_run)
-
-    os.remove(nml_cfg)
-    shutil.copy(nml_cfg_tmp, nml_cfg_run)
-    shutil.move(nml_cfg_tmp, nml_cfg)
+    os.remove(nml_cfg_tmp)
 
     # 6.2. TOP run-time namelist settings
 
     ocn_pstr_modules = " ".join(nemo_top_mod.split())
     if ocn_pstr_modules:
-        nml_top_new_name = os.path.join(rundir, "namelist_top_cfg.new")
-        with open(nml_top_new_name, "w") as newnmlT:
+        nml_top_new = os.path.join(rundir, "namelist_top_cfg.new")
+        with open(nml_top_new, "w") as newnmlT:
             newnmlT.write("&namtrc_run \n")
             newnmlT.write("    nn_dttrc    = 1                   !  time step frequency for passive tracers coupling \n")
             newnmlT.write("    nn_writetrc = " + str(ts_per_day) + "       !  time step frequency for tracer outputs \n")
@@ -605,29 +594,23 @@ def buildnml(case, caseroot, compname):
             newnmlT.write("/ \n")
 
         nml_top_tmp = os.path.join(rundir, "namelist_top_cfg.tmp")
-        cmd = "%s %s %s %s" %(Dmerge_nml, top_cfg, nml_top_new_name, nml_top_tmp)
-        rc, out, err = run_cmd(cmd)
-        expect(rc == 0, "Command %s failed rc=%d\nout=%s\nerr=%s" % (cmd, rc, out, err))
-        
-        os.remove(top_cfg)
-        os.remove(nml_top_new_name)
-        shutil.move(nml_top_tmp, top_cfg)
-
-        cmd = "%s %s %s %s" %(Dmerge_nml, top_cfg, nml_cfg_user, nml_top_tmp)
-        rc, out, err = run_cmd(cmd)
-        expect(rc == 0, "Command %s failed rc=%d\nout=%s\nerr=%s" % (cmd, rc, out, err))
-        
         nml_top_run = os.path.join(rundir, "namelist_top_cfg")
 
-        if os.path.exists(nml_top_run):
-            os.remove(nml_top_run)
+        cmd = "%s %s %s %s" %(merge_nml, top_cfg, nml_top_new, nml_top_tmp)
+        rc, out, err = run_cmd(cmd)
+        expect(rc == 0, "Command %s failed rc=%d\nout=%s\nerr=%s" % (cmd, rc, out, err))
+        os.remove(nml_top_new)
 
-        os.remove(top_cfg)
-        shutil.copy(nml_top_tmp, nml_top_run)
-        shutil.move(nml_top_tmp, top_cfg)
+        cmd = "%s %s %s %s" %(merge_nml, top_cfg_tmp, nml_cfg_user, nml_top_run)
+        rc, out, err = run_cmd(cmd)
+        expect(rc == 0, "Command %s failed rc=%d\nout=%s\nerr=%s" % (cmd, rc, out, err))
+        os.remove(top_cfg_tmp)
 
 
 ###############################################################################
+
+def _isactive(s):
+    return s!=None and s.strip()!=''
 
 def _copy_file(filename, src_dir, dest_dir):
     """ Copy a given file from a source directory to a destination directory
